@@ -1,0 +1,42 @@
+name: Compilar Juxebox+
+on:
+  workflow_dispatch:
+    inputs:
+      mc_version:
+        description: "Version de Minecraft (ej. 26.1)"
+        default: "26.1"
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: mod
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: Bajar plantilla oficial de Fabric
+        run: |
+          git clone --depth 1 --branch "${{ inputs.mc_version }}" https://github.com/FabricMC/fabric-example-mod.git tpl \
+            || git clone --depth 1 https://github.com/FabricMC/fabric-example-mod.git tpl
+      - name: Mezclar mod con plantilla
+        run: |
+          cd tpl
+          rm -rf src/main/java src/client src/main/resources/*.mixins.json src/main/resources/fabric.mod.json
+          mkdir -p src/main/java src/main/resources
+          sed -i '/splitEnvironmentSourceSets()/d' build.gradle
+          cp -r ../mod/src/main/java/. src/main/java/
+          cp -r ../mod/src/main/resources/. src/main/resources/
+          grep -q mavenCentral build.gradle || sed -i '0,/repositories {/s//repositories {\n    mavenCentral()/' build.gradle
+          sed -i '0,/dependencies {/s//dependencies {\n    implementation "com.googlecode.soundlibs:jlayer:1.0.1.4"\n    include "com.googlecode.soundlibs:jlayer:1.0.1.4"/' build.gradle
+          sed -i 's/^archives_base_name=.*/archives_base_name=juxeboxplus/' gradle.properties
+          chmod +x gradlew
+      - name: Compilar
+        run: cd tpl && ./gradlew build --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: JuxeboxPlus-jar
+          path: |
+            tpl/build/libs/*.jar
+            !tpl/build/libs/*-sources.jar
